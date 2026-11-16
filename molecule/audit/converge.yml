@@ -1,0 +1,25 @@
+---
+- name: Converge (audit only)
+  hosts: all
+  become: false
+  gather_facts: true
+  tasks:
+    - name: Audit
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir }}/../.."  # noqa: role-name[path]
+      vars:
+        linux_hardening_mode: audit
+        linux_hardening_fail_on_error: false
+
+    - name: All planted problems are reported
+      ansible.builtin.assert:
+        that:
+          - linux_hardening_user_findings | length >= 5
+          - linux_hardening_user_findings | map(attribute='key') | select('search', 'lh_empty') | list | length == 1
+        quiet: true
+
+    - name: Nothing was changed
+      ansible.builtin.command: getent shadow lh_empty
+      register: __s
+      changed_when: false
+      failed_when: "not __s.stdout.split(':')[1] == ''"

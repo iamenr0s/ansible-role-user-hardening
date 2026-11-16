@@ -1,0 +1,59 @@
+---
+- name: Gather account data
+  ansible.builtin.include_tasks: facts.yml
+
+- name: Work out what must change
+  ansible.builtin.set_fact:
+    __lh_user_todo_pw: "{{ __lh_user_lists.empty_password if linux_hardening_user_lock_empty_passwords | bool else [] }}"
+    __lh_user_todo_shell: "{{ __lh_user_lists.system_shell if linux_hardening_user_fix_system_shells | bool else [] }}"
+    __lh_user_todo_home: "{{ __lh_user_open_homes if linux_hardening_user_fix_home_permissions | bool else [] }}"
+
+- name: Ensure the backup directory exists
+  ansible.builtin.file:
+    path: "{{ linux_hardening_user_backup_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: linux_hardening_backup | bool
+
+- name: Back up the account files before changing them
+  ansible.builtin.copy:
+    src: "/etc/{{ item }}"
+    dest: "{{ linux_hardening_user_backup_dir }}/{{ item }}.{{ ansible_facts['date_time']['iso8601_basic_short'] }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0600"
+  loop: [passwd, shadow]
+  when:
+    - linux_hardening_backup | bool
+    - (__lh_user_todo_pw + __lh_user_todo_shell) | length > 0
+
+- name: Lock accounts with an empty password
+  ansible.builtin.user:
+    name: "{{ item }}"
+    password_lock: true
+  loop: "{{ __lh_user_todo_pw }}"
+
+- name: Give system accounts a non-login shell
+  ansible.builtin.user:
+    name: "{{ item }}"
+    shell: "{{ linux_hardening_user_nologin_shell }}"
+  loop: "{{ __lh_user_todo_shell }}"
+
+- name: Restrict home directory permissions
+  ansible.builtin.file:
+    path: "{{ item.home }}"
+    state: directory
+    mode: "g-w,o-rwx"
+  loop: "{{ __lh_user_todo_home }}"
+  loop_control:
+    label: "{{ item.home }}"
+
+- name: Set the inactivity lock period for new accounts
+  ansible.builtin.command: useradd -D -f {{ linux_hardening_user_inactive_days | int }}
+  changed_when: true
+  when:
+    - linux_hardening_user_inactive_days is not none
+    - __lh_user_inactive != linux_hardening_user_inactive_days | int

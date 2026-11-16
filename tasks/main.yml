@@ -1,0 +1,35 @@
+---
+# audit: read-only comparison. remediate: back up, fix what is safely fixable, re-audit.
+# Never changes: UID 0 accounts other than root, duplicate UIDs (reported only).
+- name: Run user_hardening
+  when: linux_hardening_user_enabled | bool
+  block:
+    - name: Validate linux_hardening_mode
+      ansible.builtin.assert:
+        that: linux_hardening_mode in ['audit', 'remediate']
+        fail_msg: "linux_hardening_mode must be 'audit' or 'remediate', got '{{ linux_hardening_mode }}'"
+        quiet: true
+
+    - name: Audit (read-only)
+      ansible.builtin.include_tasks: audit.yml
+      when: linux_hardening_mode == 'audit'
+
+    - name: Remediate
+      when: linux_hardening_mode == 'remediate'
+      block:
+        - name: Require explicit remediation confirmation
+          ansible.builtin.assert:
+            that: linux_hardening_confirm_remediation | bool
+            fail_msg: >-
+              Remediation changes accounts. Set linux_hardening_confirm_remediation: true
+              to proceed (run with linux_hardening_mode: audit to preview).
+            quiet: true
+
+        - name: Configure
+          ansible.builtin.include_tasks: configure.yml
+
+        - name: Verify effective configuration
+          ansible.builtin.include_tasks: audit.yml
+          vars:
+            __lh_user_audit_fatal: true
+          when: linux_hardening_verify | bool

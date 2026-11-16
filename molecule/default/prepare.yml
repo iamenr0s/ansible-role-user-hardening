@@ -1,0 +1,32 @@
+---
+# Accounts that each trigger one finding. lh_exempt must stay untouched.
+- name: Prepare test accounts
+  hosts: all
+  become: false
+  gather_facts: false
+  tasks:
+    - name: Create accounts
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        uid: "{{ item.uid }}"
+        shell: "{{ item.shell | default('/bin/bash') }}"
+        password: ""
+        system: "{{ item.system | default(false) }}"
+        non_unique: "{{ item.non_unique | default(false) }}"
+        create_home: true
+      loop:
+        - {name: lh_empty, uid: 1500}
+        - {name: lh_svc, uid: 401, system: true, password: "!"}
+        - {name: lh_exempt, uid: 402, system: true}
+        - {name: lh_dup, uid: 1500, non_unique: true}
+        - {name: lh_home, uid: 1501}
+
+    - name: Give lh_svc a locked password so only the shell is wrong
+      ansible.builtin.user:
+        name: lh_svc
+        password_lock: true
+
+    - name: Open one home directory
+      ansible.builtin.file:
+        path: /home/lh_home
+        mode: "0777"

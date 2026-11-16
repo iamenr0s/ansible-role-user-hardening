@@ -1,0 +1,23 @@
+---
+# --- Shared collection variables ---
+linux_hardening_mode: audit                    # audit (read-only) | remediate
+linux_hardening_confirm_remediation: false     # must be true for any change
+linux_hardening_profile: cis_level1
+linux_hardening_backup: true
+linux_hardening_verify: true
+linux_hardening_fail_on_error: true
+
+# --- user_hardening ---
+linux_hardening_user_enabled: true
+# Accounts never changed by remediation (the Ansible user is always added to this list).
+linux_hardening_user_exempt: [root, sync, shutdown, halt]
+# Lock accounts that have an empty password.
+linux_hardening_user_lock_empty_passwords: true
+# Set this shell on system accounts (UID below UID_MIN) that have a login shell.
+linux_hardening_user_fix_system_shells: true
+linux_hardening_user_nologin_shell: /usr/sbin/nologin
+# Remove group-write and all "other" access from interactive users' home directories.
+linux_hardening_user_fix_home_permissions: true
+# Days after password expiry before an account is locked (useradd -D -f). null = do not manage.
+linux_hardening_user_inactive_days: 30
+linux_hardening_user_backup_dir: /var/backups/linux-hardening

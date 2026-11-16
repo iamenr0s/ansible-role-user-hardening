@@ -1,0 +1,49 @@
+---
+- name: Verify
+  hosts: all
+  become: false
+  gather_facts: true
+  tasks:
+    - name: Audit again, without failing
+      ansible.builtin.include_role:
+        name: "{{ playbook_dir }}/../.."  # noqa: role-name[path]
+      vars:
+        linux_hardening_mode: audit
+        linux_hardening_fail_on_error: false
+        linux_hardening_user_exempt: [root, sync, shutdown, halt, lh_exempt]
+
+    - name: Only the report-only finding (duplicate UID) is left
+      ansible.builtin.assert:
+        that:
+          - linux_hardening_user_findings | length == 1
+          - "linux_hardening_user_findings[0].key == 'duplicate UID: 1500'"
+          - not linux_hardening_user_findings[0].fixable
+        quiet: true
+
+    - name: Read results
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - getent shadow lh_empty
+        - getent passwd lh_svc
+        - getent shadow lh_exempt
+        - stat -c %a /home/lh_home
+        - useradd -D
+      register: __v
+      changed_when: false
+
+    - name: Assert the fixes were applied and the exempt account was left alone
+      ansible.builtin.assert:
+        that:
+          - "__v.results[0].stdout.split(':')[1].startswith('!')"
+          - "__v.results[1].stdout.endswith('nologin')"
+          - "__v.results[2].stdout.split(':')[1] == ''"
+          - __v.results[3].stdout == '750'
+          - "'INACTIVE=30' in __v.results[4].stdout"
+        quiet: true
+
+    - name: Backups of passwd and shadow were taken
+      ansible.builtin.find:
+        paths: /var/backups/linux-hardening
+        patterns: "passwd.*,shadow.*"
+      register: __bk
+      failed_when: __bk.matched < 2

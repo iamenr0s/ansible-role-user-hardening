@@ -20,9 +20,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - run: pip install ansible ansible-lint yamllint
-      - run: yamllint .
-      - run: ansible-lint
+      # Same hooks and pinned versions as local pre-commit (bumped by Renovate).
+      - run: pip install pre-commit
+      - run: pre-commit run --all-files --show-diff-on-failure
 
   molecule:
     name: ${{ matrix.distro }}
@@ -31,7 +31,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        distro: [almalinux9, debian13, ubuntu2404, fedora44, almalinux8, almalinux10, rockylinux9, debian12, ubuntu2204, fedora42, fedora43, rockylinux8, rockylinux10]
+        distro:
+          - almalinux9
+          - debian13
+          - ubuntu2404
+          - fedora44
+          - almalinux8
+          - almalinux10
+          - rockylinux9
+          - debian12
+          - ubuntu2204
+          - fedora42
+          - fedora43
+          - rockylinux8
+          - rockylinux10
         include:
           # EL8 managed-node Python 3.6 needs ansible-core 2.16
           - {distro: almalinux8, experimental: true, ansible_pin: "ansible<10"}
@@ -50,7 +63,7 @@ jobs:
           python-version: "3.14"
       - run: pip install "${{ matrix.ansible_pin || 'ansible' }}" molecule "molecule-plugins[podman]"
       - name: Run all scenarios
-        run: molecule test --all --exclude vagrant --exclude vagrant-relabel  # vagrant scenarios need libvirt: run locally
+        run: molecule test --all
         env:
           PY_COLORS: "1"
           ANSIBLE_FORCE_COLOR: "1"

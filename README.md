@@ -35,6 +35,7 @@ Variables use the collection-wide `linux_hardening_*` prefix (shared with siblin
 - Service accounts that really need a shell (e.g. `su - postgres`) must be listed in `linux_hardening_user_exempt`, otherwise they get `nologin`.
 - Locking an empty-password account blocks password logins only; SSH key logins keep working.
 - Tightened home directories can break shared-home setups.
+- Only `ansible_user` is auto-exempted. If you connect via `remote_user`/`ansible.cfg` or a local connection, add that account to `linux_hardening_user_exempt`.
 
 ## Example
 ```yaml

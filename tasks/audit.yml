@@ -54,8 +54,7 @@
     msg: "user_hardening found {{ __lh_user_blocking | length }} deviation(s)."
   vars:
     __lh_user_blocking: >-
-      {{ linux_hardening_user_findings
-         if (linux_hardening_fail_on_error | bool) and not (__lh_user_audit_fatal | default(false))
-         else linux_hardening_user_findings | selectattr('fixable') | list
-         if (__lh_user_audit_fatal | default(false)) else [] }}
+      {{ linux_hardening_user_findings | selectattr('fixable') | list if (__lh_user_audit_fatal | default(false))
+         else linux_hardening_user_findings if (linux_hardening_fail_on_error | bool)
+         else [] }}
   when: __lh_user_blocking | length > 0

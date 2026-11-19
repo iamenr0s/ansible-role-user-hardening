@@ -29,7 +29,7 @@ Features
 Variables use the collection-wide `linux_hardening_*` prefix (shared with sibling roles) rather than `user_hardening_*`. Full list: `defaults/main.yml` and `meta/argument_specs.yml`. `linux_hardening_profile` is reserved here: this role applies the same checks for every profile.
 
 ## Modes
-`audit` (default) is read-only and sets `linux_hardening_user_findings` (`key, expected, actual, fixable`). `remediate` needs `linux_hardening_confirm_remediation: true`; `/etc/passwd` and `/etc/shadow` are copied to `linux_hardening_user_backup_dir` first (when `linux_hardening_backup` is true). After remediation only fixable findings fail the run.
+`audit` (default) is read-only and sets `linux_hardening_user_findings` (`key, expected, actual, fixable`). `remediate` needs `linux_hardening_confirm_remediation: true`; `/etc/passwd` and `/etc/shadow` are copied to `linux_hardening_user_backup_dir` first (when `linux_hardening_backup` is true). After remediation only fixable findings fail the run. `--check` with `remediate` previews the changes and skips the re-audit.
 
 ## Safety
 - Service accounts that really need a shell (e.g. `su - postgres`) must be listed in `linux_hardening_user_exempt`, otherwise they get `nologin`.

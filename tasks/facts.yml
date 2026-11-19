@@ -1,19 +1,22 @@
 ---
 # Read-only. Reads the local account files (not LDAP/SSSD) and derives the lists used by audit and configure.
-- name: Read local account files
+- name: facts | Read local account files
   ansible.builtin.slurp:
     src: "{{ item }}"
   loop: [/etc/passwd, /etc/shadow, /etc/login.defs]
   register: __lh_user_raw
   check_mode: false
+  no_log: true  # /etc/shadow holds password hashes
 
-- name: Read the useradd defaults
+# No module reports the useradd defaults; read-only, so never changed.
+- name: facts | Read the useradd defaults
   ansible.builtin.command: useradd -D
   register: __lh_user_useradd
   changed_when: false
   check_mode: false
 
-- name: Parse accounts
+# Only whether a password is empty is kept, never the hash itself.
+- name: facts | Parse accounts
   ansible.builtin.set_fact:
     __lh_user_db: >-
       {%- set passwd = __lh_user_raw.results[0].content | b64decode -%}
@@ -28,12 +31,12 @@
       {%- for l in passwd.splitlines() if l and not l.startswith('#') -%}
       {%- set f = l.split(':') -%}
       {%- set _ = out.append({'name': f[0], 'uid': f[2] | int, 'home': f[5], 'shell': f[6] | default(''),
-                              'hash': shadow.get(f[0])}) -%}
+                              'empty_pw': shadow.get(f[0]) == ''}) -%}
       {%- endfor -%}
       {{ {'uid_min': ((defs | regex_findall('(?m)^UID_MIN\s+(\d+)')) + ['1000']) | first | int,
           'accounts': out} | to_json }}
 
-- name: Derive offender lists
+- name: facts | Derive offender lists
   ansible.builtin.set_fact:
     __lh_user_lists: >-
       {%- set db = __lh_user_db | from_json if __lh_user_db is string else __lh_user_db -%}
@@ -42,20 +45,26 @@
       {%- set empty = [] -%}{%- set shell = [] -%}{%- set uid0 = [] -%}{%- set dup = [] -%}{%- set inter = [] -%}
       {%- for a in db.accounts -%}
       {%- set login = not (a.shell.endswith('nologin') or a.shell.endswith('/false')) -%}
-      {%- if a.hash is not none and a.hash == '' and a.name not in exempt -%}{%- set _ = empty.append(a.name) -%}{%- endif -%}
-      {%- if a.uid > 0 and a.uid < db.uid_min and login and a.name not in exempt -%}{%- set _ = shell.append(a.name) -%}{%- endif -%}
+      {%- if a.empty_pw and a.name not in exempt -%}{%- set _ = empty.append(a.name) -%}{%- endif -%}
+      {%- if a.uid > 0 and a.uid < db.uid_min and login and a.name not in exempt -%}
+      {%- set _ = shell.append(a.name) -%}
+      {%- endif -%}
       {%- if a.uid == 0 and a.name != 'root' -%}{%- set _ = uid0.append(a.name) -%}{%- endif -%}
       {%- if a.uid in seen and a.uid not in dup -%}{%- set _ = dup.append(a.uid) -%}{%- endif -%}
       {%- set _ = seen.update({a.uid: true}) -%}
-      {%- if a.uid >= db.uid_min and a.uid < 65534 and login and a.home.startswith('/') -%}{%- set _ = inter.append({'name': a.name, 'home': a.home}) -%}{%- endif -%}
+      {%- if a.uid >= db.uid_min and a.uid < 65534 and login and a.home.startswith('/')
+             and a.name not in exempt -%}
+      {%- set _ = inter.append({'name': a.name, 'home': a.home}) -%}
+      {%- endif -%}
       {%- endfor -%}
-      {{ {'empty_password': empty, 'system_shell': shell, 'extra_uid0': uid0, 'duplicate_uid': dup, 'interactive': inter} | to_json }}
+      {{ {'empty_password': empty, 'system_shell': shell, 'extra_uid0': uid0,
+          'duplicate_uid': dup, 'interactive': inter} | to_json }}
 
-- name: Normalise lists
+- name: facts | Normalise lists
   ansible.builtin.set_fact:
     __lh_user_lists: "{{ __lh_user_lists | from_json if __lh_user_lists is string else __lh_user_lists }}"
 
-- name: Stat interactive users' home directories
+- name: facts | Stat interactive users' home directories
   ansible.builtin.stat:
     path: "{{ item.home }}"
   loop: "{{ __lh_user_lists.interactive }}"
@@ -64,7 +73,7 @@
   register: __lh_user_homes
   check_mode: false
 
-- name: Find home directories that are too open
+- name: facts | Find home directories that are too open
   ansible.builtin.set_fact:
     __lh_user_open_homes: >-
       {{ __lh_user_homes.results
@@ -79,10 +88,11 @@
            | rejectattr('stat.wgrp') | rejectattr('stat.roth') | rejectattr('stat.woth')
            | selectattr('stat.xoth', 'eq', true) | list }}
 
-- name: Reduce to name and path
+- name: facts | Reduce to name and path
   ansible.builtin.set_fact:
     __lh_user_open_homes: "{{ __lh_user_open_homes | map(attribute='item') | list }}"
 
-- name: Read the current inactivity setting
+- name: facts | Read the current inactivity setting
   ansible.builtin.set_fact:
-    __lh_user_inactive: "{{ (__lh_user_useradd.stdout | regex_findall('(?m)^INACTIVE=(-?\\d+)') + ['-1']) | first | int }}"
+    __lh_user_inactive: >-
+      {{ (__lh_user_useradd.stdout | regex_findall('(?m)^INACTIVE=(-?\d+)') + ['-1']) | first | int }}

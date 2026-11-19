@@ -27,7 +27,6 @@ jobs:
   molecule:
     name: ${{ matrix.distro }}
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -47,15 +46,8 @@ jobs:
           - rockylinux10
         include:
           # EL8 managed-node Python 3.6 needs ansible-core 2.16
-          - {distro: almalinux8, experimental: true, ansible_pin: "ansible<10"}
-          - {distro: almalinux10, experimental: true}
-          - {distro: rockylinux9, experimental: true}
-          - {distro: debian12, experimental: true}
-          - {distro: ubuntu2204, experimental: true}
-          - {distro: fedora42, experimental: true}
-          - {distro: fedora43, experimental: true}
-          - {distro: rockylinux8, experimental: true, ansible_pin: "ansible<10"}
-          - {distro: rockylinux10, experimental: true}
+          - {distro: almalinux8, ansible_pin: "ansible<10"}
+          - {distro: rockylinux8, ansible_pin: "ansible<10"}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

@@ -9,9 +9,12 @@ Features
 - Audit mode by default: read-only, and reports every deviation. Changes need `linux_hardening_confirm_remediation: true`.
 - Locks accounts with an empty password, gives system accounts a `nologin` shell, tightens home directory permissions and sets the `useradd` INACTIVE default.
 - Reports UID 0 accounts other than root and duplicate UIDs but never changes them.
-- Never touches `root, sync, shutdown, halt`, anything in `linux_hardening_user_exempt`, or the Ansible user.
+- Never touches accounts in `linux_hardening_user_exempt` (default `root, sync, shutdown, halt`; keep these when you override it) or the Ansible user.
 - Backs up `/etc/passwd` and `/etc/shadow` before changing them.
 - Password ageing and complexity belong to `password_policy`, PAM to `pam_hardening`, sudoers to `sudo_hardening` in the `iamenr0s.linux_hardening` collection.
+
+## Requirements
+Root privileges (`become: true`): the role reads `/etc/shadow` and runs `useradd`. No collection or role dependencies.
 
 ## What it checks
 | Check | Remediation |

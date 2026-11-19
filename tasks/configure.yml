@@ -62,4 +62,4 @@
   changed_when: true
   when:
     - linux_hardening_user_inactive_days is not none
-    - __lh_user_inactive != linux_hardening_user_inactive_days | int
+    - __lh_user_inactive | int != linux_hardening_user_inactive_days | int  # 2.16 may return a string

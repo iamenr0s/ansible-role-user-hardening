@@ -15,7 +15,7 @@
       ansible.builtin.assert:
         that:
           - linux_hardening_user_findings | length >= 5
-          - linux_hardening_user_findings | map(attribute='key') | select('search', 'lh_empty') | list | length == 1
+          - "'empty password: lh_empty' in linux_hardening_user_findings | map(attribute='key')"
         quiet: true
 
     - name: Read lh_empty's shadow entry

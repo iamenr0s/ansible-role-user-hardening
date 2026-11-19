@@ -5,8 +5,9 @@
 - name: configure | Work out what must change
   ansible.builtin.set_fact:
     __lh_user_todo_pw: >-
-      {{ __lh_user_lists.empty_password if linux_hardening_user_lock_empty_passwords | bool else [] }}
-    __lh_user_todo_shell: "{{ __lh_user_lists.system_shell if linux_hardening_user_fix_system_shells | bool else [] }}"
+      {{ __lh_user_lists['empty_password'] if linux_hardening_user_lock_empty_passwords | bool else [] }}
+    __lh_user_todo_shell: >-
+      {{ __lh_user_lists['system_shell'] if linux_hardening_user_fix_system_shells | bool else [] }}
     __lh_user_todo_home: "{{ __lh_user_open_homes if linux_hardening_user_fix_home_permissions | bool else [] }}"
     # One timestamp for both files, and no dependency on gathered facts.
     __lh_user_backup_stamp: "{{ now(fmt='%Y%m%dT%H%M%S') }}"
@@ -48,12 +49,12 @@
 
 - name: configure | Restrict home directory permissions
   ansible.builtin.file:
-    path: "{{ item.home }}"
+    path: "{{ item['home'] }}"
     state: directory
     mode: "g-w,o-rwx"
   loop: "{{ __lh_user_todo_home }}"
   loop_control:
-    label: "{{ item.home }}"
+    label: "{{ item['home'] }}"
 
 # No module manages the useradd defaults; only runs when the current value differs.
 - name: configure | Set the inactivity lock period for new accounts

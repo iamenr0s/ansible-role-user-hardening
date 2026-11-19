@@ -17,5 +17,5 @@
       rescue:
         - name: Assert the refusal came from the confirmation check
           ansible.builtin.assert:
-            that: "'confirm_remediation' in ansible_failed_result.msg"
+            that: "'confirm_remediation' in ansible_failed_result['msg']"
             quiet: true

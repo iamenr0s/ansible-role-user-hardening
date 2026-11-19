@@ -37,7 +37,7 @@ argument_specs:
       linux_hardening_user_exempt:
         type: list
         elements: str
-        default: [root, sync, shutdown, halt]
+        default: [root]
         description: Accounts remediation never changes; the Ansible user is always added.
       linux_hardening_user_lock_empty_passwords:
         type: bool

@@ -7,12 +7,12 @@
   tasks:
     - name: Create accounts
       ansible.builtin.user:
-        name: "{{ item.name }}"
-        uid: "{{ item.uid }}"
-        shell: "{{ item.shell | default('/bin/bash') }}"
+        name: "{{ item['name'] }}"
+        uid: "{{ item['uid'] }}"
+        shell: "{{ item['shell'] | default('/bin/bash') }}"
         password: ""
-        system: "{{ item.system | default(false) }}"
-        non_unique: "{{ item.non_unique | default(false) }}"
+        system: "{{ item['system'] | default(false) }}"
+        non_unique: "{{ item['non_unique'] | default(false) }}"
         create_home: true
       loop:
         - {name: lh_empty, uid: 1500}

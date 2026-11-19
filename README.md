@@ -9,7 +9,7 @@ Features
 - Audit mode by default: read-only, and reports every deviation. Changes need `linux_hardening_confirm_remediation: true`.
 - Locks accounts with an empty password, gives system accounts a `nologin` shell, tightens home directory permissions and sets the `useradd` INACTIVE default.
 - Reports UID 0 accounts other than root and duplicate UIDs but never changes them.
-- Never touches accounts in `linux_hardening_user_exempt` (default `root, sync, shutdown, halt`; keep these when you override it) or the Ansible user.
+- Never touches accounts in `linux_hardening_user_exempt` (default `root`) or the Ansible user.
 - Backs up `/etc/passwd` and `/etc/shadow` before changing them.
 - Password ageing and complexity belong to `password_policy`, PAM to `pam_hardening`, sudoers to `sudo_hardening` in the `iamenr0s.linux_hardening` collection.
 
@@ -20,7 +20,7 @@ Root privileges (`become: true`): the role reads `/etc/shadow` and runs `useradd
 | Check | Remediation |
 |---|---|
 | Account with an empty password | locked (`usermod -L`); key logins keep working |
-| System account (UID below `UID_MIN`) with a login shell | shell set to `/usr/sbin/nologin` |
+| System account (UID below `UID_MIN`) with a login shell (`nologin`, `false`, `sync`, `shutdown`, `halt` are not) | shell set to `/usr/sbin/nologin` |
 | Interactive user's home with group-write or any "other" access | `g-w,o-rwx` |
 | `useradd -D` INACTIVE differs from 30 days | `useradd -D -f 30` |
 | UID 0 account other than root | **reported only** |
@@ -49,14 +49,16 @@ Variables use the collection-wide `linux_hardening_*` prefix (shared with siblin
       vars:
         linux_hardening_mode: remediate
         linux_hardening_confirm_remediation: true
-        linux_hardening_user_exempt: [root, sync, shutdown, halt, postgres]
+        linux_hardening_user_exempt: [root, postgres]
 ```
 
 ## Verification
-Molecule `default` (remediate, idempotence, re-audit, backups, exempt account untouched), `audit` (reports, changes nothing), `refuse`. Tested: AlmaLinux 9, Ubuntu 24.04, Debian 13. CI matrix: AlmaLinux 8–10, Rocky 8–10, Fedora 42–44, Debian 12–13, Ubuntu 22.04/24.04.
+Unit tests for the parsing filters in `filter_plugins/` (`pytest tests/unit`, also run by pre-commit). Molecule `default` (remediate, idempotence, re-audit, backups, exempt account untouched), `audit` (reports, changes nothing), `refuse`. Tested: AlmaLinux 9, Ubuntu 24.04, Debian 13. CI matrix: AlmaLinux 8–10, Rocky 8–10, Fedora 42–44, Debian 12–13, Ubuntu 22.04/24.04.
 
 ## Rollback
 Restore `passwd.<timestamp>` / `shadow.<timestamp>` from `/var/backups/linux-hardening` (careful: this also reverts any other account change made since).
+
+**Idempotent:** true. **Atomic:** false: accounts are changed one at a time, so a failed run can leave some fixes applied (backups cover recovery).
 
 ## Known gaps
 - Local files only; LDAP/SSSD accounts are not examined.

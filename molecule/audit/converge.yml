@@ -25,5 +25,5 @@
 
     - name: Nothing was changed
       ansible.builtin.assert:
-        that: ansible_facts.getent_shadow.lh_empty[0] == ''
+        that: ansible_facts['getent_shadow']['lh_empty'][0] == ''
         quiet: true

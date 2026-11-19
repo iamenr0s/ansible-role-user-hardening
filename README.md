@@ -2,11 +2,18 @@
 
 # Ansible Role: User Hardening
 
-> Standalone copy of `user_hardening` from the [iamenr0s.linux_hardening](https://github.com/iamenr0s/linux-hardening-collection) collection. Variables keep the collection-wide `linux_hardening_*` prefix.
+This role audits and hardens **local** accounts (`/etc/passwd`, `/etc/shadow`) on Debian/Ubuntu, RHEL/AlmaLinux/RockyLinux and Fedora servers. It does not create or manage users; use a user-management role for that.
 
-Audit-first hygiene for **local** accounts (`/etc/passwd`, `/etc/shadow`). It does not create or manage users; use a user-management role for that. Password ageing and complexity belong to `password_policy`, PAM to `pam_hardening`, sudoers to `sudo_hardening`.
+Features
+--------
+- Audit mode by default: read-only, and reports every deviation. Changes need `linux_hardening_confirm_remediation: true`.
+- Locks accounts with an empty password, gives system accounts a `nologin` shell, tightens home directory permissions and sets the `useradd` INACTIVE default.
+- Reports UID 0 accounts other than root and duplicate UIDs but never changes them.
+- Never touches `root, sync, shutdown, halt`, anything in `linux_hardening_user_exempt`, or the Ansible user.
+- Backs up `/etc/passwd` and `/etc/shadow` before changing them.
+- Password ageing and complexity belong to `password_policy`, PAM to `pam_hardening`, sudoers to `sudo_hardening` in the `iamenr0s.linux_hardening` collection.
 
-## Checks
+## What it checks
 | Check | Remediation |
 |---|---|
 | Account with an empty password | locked (`usermod -L`); key logins keep working |
@@ -16,30 +23,33 @@ Audit-first hygiene for **local** accounts (`/etc/passwd`, `/etc/shadow`). It do
 | UID 0 account other than root | **reported only** |
 | Duplicate UIDs | **reported only** |
 
-`UID_MIN` is read from `/etc/login.defs` (default 1000). Remediation never touches `root, sync, shutdown, halt`, anything in `linux_hardening_user_exempt`, or the Ansible user.
+`UID_MIN` is read from `/etc/login.defs` (default 1000). Each fix has an on/off switch (`..._lock_empty_passwords`, `..._fix_system_shells`, `..._fix_home_permissions`); `..._inactive_days: null` leaves the default unmanaged.
+
+## Variable names
+Variables use the collection-wide `linux_hardening_*` prefix (shared with sibling roles) rather than `user_hardening_*`. Full list: `defaults/main.yml` and `meta/argument_specs.yml`. `linux_hardening_profile` is reserved here: this role applies the same checks for every profile.
 
 ## Modes
-`audit` (default) is read-only and sets `linux_hardening_user_findings` (`key, expected, actual, fixable`). `remediate` needs `linux_hardening_confirm_remediation: true`; `/etc/passwd` and `/etc/shadow` are copied to `linux_hardening_user_backup_dir` first. After remediation only *fixable* findings fail the run.
+`audit` (default) is read-only and sets `linux_hardening_user_findings` (`key, expected, actual, fixable`). `remediate` needs `linux_hardening_confirm_remediation: true`; `/etc/passwd` and `/etc/shadow` are copied to `linux_hardening_user_backup_dir` first (when `linux_hardening_backup` is true). After remediation only fixable findings fail the run.
 
-## Variables
-See `defaults/main.yml` and `meta/argument_specs.yml`. Each fix has an on/off switch (`..._lock_empty_passwords`, `..._fix_system_shells`, `..._fix_home_permissions`); `..._inactive_days: null` leaves the default unmanaged.
+## Safety
+- Service accounts that really need a shell (e.g. `su - postgres`) must be listed in `linux_hardening_user_exempt`, otherwise they get `nologin`.
+- Locking an empty-password account blocks password logins only; SSH key logins keep working.
+- Tightened home directories can break shared-home setups.
 
 ## Example
 ```yaml
 - hosts: all
+  become: true
   roles:
-    - role: iamenr0s.linux_hardening.user_hardening
+    - role: iamenr0s.user_hardening
       vars:
         linux_hardening_mode: remediate
         linux_hardening_confirm_remediation: true
         linux_hardening_user_exempt: [root, sync, shutdown, halt, postgres]
 ```
 
-## Impact
-Service accounts that really need a shell (e.g. `su - postgres`) must be listed in `linux_hardening_user_exempt`, otherwise they get `nologin`. Tightened home directories can break shared-home setups.
-
 ## Verification
-Molecule `default` (remediate, idempotence, re-audit, backups, exempt account untouched), `audit` (reports, changes nothing), `refuse`. Tested: AlmaLinux 9, Ubuntu 24.04, Debian 13.
+Molecule `default` (remediate, idempotence, re-audit, backups, exempt account untouched), `audit` (reports, changes nothing), `refuse`. Tested: AlmaLinux 9, Ubuntu 24.04, Debian 13. CI matrix: AlmaLinux 8–10, Rocky 8–10, Fedora 42–44, Debian 12–13, Ubuntu 22.04/24.04.
 
 ## Rollback
 Restore `passwd.<timestamp>` / `shadow.<timestamp>` from `/var/backups/linux-hardening` (careful: this also reverts any other account change made since).

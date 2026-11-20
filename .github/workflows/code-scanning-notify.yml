@@ -30,6 +30,7 @@ jobs:
             | jq -c --arg since "$since" '.[] | select((.updated_at // .created_at) >= $since)' \
             | while IFS= read -r alert; do
                 jq -n --argjson a "$alert" \
-                  '{text: "🚨 Code scanning alert in \(env.GITHUB_REPOSITORY): \($a.rule.description) [\($a.rule.severity)] — \($a.html_url)"}' \
+                  '{text: ("🚨 Code scanning alert in \(env.GITHUB_REPOSITORY): "
+                    + "\($a.rule.description) [\($a.rule.severity)] — \($a.html_url)")}' \
                   | curl -sf -X POST -H 'Content-Type: application/json' -d @- "$WEBHOOK_URL"
               done

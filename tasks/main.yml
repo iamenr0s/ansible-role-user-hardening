@@ -4,10 +4,17 @@
 - name: Run user_hardening
   when: linux_hardening_user_enabled | bool
   block:
-    - name: Validate linux_hardening_mode
+    - name: Validate inputs
       ansible.builtin.assert:
-        that: linux_hardening_mode in ['audit', 'remediate']
-        fail_msg: "linux_hardening_mode must be 'audit' or 'remediate', got '{{ linux_hardening_mode }}'"
+        that:
+          - linux_hardening_mode in ['audit', 'remediate']
+          # type: raw in argument_specs (int rejects null); a non-integer would otherwise become 0.
+          - >-
+            linux_hardening_user_inactive_days is none
+            or linux_hardening_user_inactive_days | string is match('^-?[0-9]+$')
+        fail_msg: >-
+          linux_hardening_mode must be 'audit' or 'remediate' (got '{{ linux_hardening_mode }}') and
+          linux_hardening_user_inactive_days an integer or null (got '{{ linux_hardening_user_inactive_days }}').
         quiet: true
 
     - name: Audit (read-only)
@@ -32,4 +39,7 @@
           ansible.builtin.include_tasks: audit.yml
           vars:
             __lh_user_audit_fatal: true
-          when: linux_hardening_verify | bool
+          # In check mode nothing was changed, so the re-audit would always fail.
+          when:
+            - linux_hardening_verify | bool
+            - not ansible_check_mode

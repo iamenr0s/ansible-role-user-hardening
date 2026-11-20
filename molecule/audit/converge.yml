@@ -2,7 +2,7 @@
 - name: Converge (audit only)
   hosts: all
   become: false
-  gather_facts: true
+  gather_facts: false  # the role must not need facts
   tasks:
     - name: Audit
       ansible.builtin.include_role:
@@ -15,11 +15,15 @@
       ansible.builtin.assert:
         that:
           - linux_hardening_user_findings | length >= 5
-          - linux_hardening_user_findings | map(attribute='key') | select('search', 'lh_empty') | list | length == 1
+          - "'empty password: lh_empty' in linux_hardening_user_findings | map(attribute='key')"
         quiet: true
 
+    - name: Read lh_empty's shadow entry
+      ansible.builtin.getent:
+        database: shadow
+        key: lh_empty
+
     - name: Nothing was changed
-      ansible.builtin.command: getent shadow lh_empty
-      register: __s
-      changed_when: false
-      failed_when: "not __s.stdout.split(':')[1] == ''"
+      ansible.builtin.assert:
+        that: ansible_facts['getent_shadow']['lh_empty'][0] == ''
+        quiet: true

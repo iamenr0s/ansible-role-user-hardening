@@ -11,3 +11,28 @@ repos:
     rev: v26.11.0
     hooks:
       - id: ansible-lint
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
+    hooks:
+      - id: ruff-check
+        args: [--line-length=120, "--select=E,W,F"]
+      - id: ruff-check
+        name: ruff (plugin docstrings and type hints)
+        args: [--line-length=120, "--select=D,ANN", "--ignore=D203,D213,ANN401"]
+        files: ^filter_plugins/
+
+  - repo: local
+    hooks:
+      - id: unit-tests
+        name: Unit-test filter plugins
+        entry: pytest -q tests/unit
+        language: python
+        additional_dependencies: [pytest]
+        pass_filenames: false
+        files: ^(filter_plugins|tests/unit)/

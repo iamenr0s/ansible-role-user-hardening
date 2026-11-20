@@ -10,4 +10,4 @@
       vars:
         linux_hardening_mode: remediate
         linux_hardening_confirm_remediation: true
-        linux_hardening_user_exempt: [root, sync, shutdown, halt, lh_exempt]
+        linux_hardening_user_exempt: [root, lh_exempt]

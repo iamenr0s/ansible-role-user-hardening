@@ -10,7 +10,7 @@ linux_hardening_fail_on_error: true
 # --- user_hardening ---
 linux_hardening_user_enabled: true
 # Accounts never changed by remediation (the Ansible user is always added to this list).
-linux_hardening_user_exempt: [root, sync, shutdown, halt]
+linux_hardening_user_exempt: [root]
 # Lock accounts that have an empty password.
 linux_hardening_user_lock_empty_passwords: true
 # Set this shell on system accounts (UID below UID_MIN) that have a login shell.

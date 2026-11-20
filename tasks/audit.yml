@@ -1,44 +1,31 @@
 ---
-- name: Gather account data
+- name: audit | Gather account data
   ansible.builtin.include_tasks: facts.yml
 
-- name: Compare with desired state
+- name: audit | Compare with desired state
   ansible.builtin.set_fact:
-    __lh_user_findings: >-
-      {%- set L = __lh_user_lists -%}
-      {%- set out = [] -%}
-      {%- if linux_hardening_user_lock_empty_passwords | bool -%}
-      {%- for n in L.empty_password -%}{%- set _ = out.append({'key': 'empty password: ' ~ n, 'expected': 'locked', 'actual': 'empty', 'fixable': true}) -%}{%- endfor -%}
-      {%- endif -%}
-      {%- if linux_hardening_user_fix_system_shells | bool -%}
-      {%- for n in L.system_shell -%}{%- set _ = out.append({'key': 'system account shell: ' ~ n, 'expected': linux_hardening_user_nologin_shell, 'actual': 'login shell', 'fixable': true}) -%}{%- endfor -%}
-      {%- endif -%}
-      {%- if linux_hardening_user_fix_home_permissions | bool -%}
-      {%- for h in __lh_user_open_homes -%}{%- set _ = out.append({'key': 'home directory: ' ~ h.home, 'expected': 'no group-write, no other access', 'actual': 'too open', 'fixable': true}) -%}{%- endfor -%}
-      {%- endif -%}
-      {%- if linux_hardening_user_inactive_days is not none and __lh_user_inactive != linux_hardening_user_inactive_days | int -%}
-      {%- set _ = out.append({'key': 'useradd INACTIVE', 'expected': linux_hardening_user_inactive_days | string, 'actual': __lh_user_inactive | string, 'fixable': true}) -%}
-      {%- endif -%}
-      {%- for n in L.extra_uid0 -%}{%- set _ = out.append({'key': 'UID 0 account: ' ~ n, 'expected': 'only root', 'actual': 'extra UID 0', 'fixable': false}) -%}{%- endfor -%}
-      {%- for u in L.duplicate_uid -%}{%- set _ = out.append({'key': 'duplicate UID: ' ~ u, 'expected': 'unique', 'actual': 'shared', 'fixable': false}) -%}{%- endfor -%}
-      {{ out | to_json }}
+    linux_hardening_user_findings: >-
+      {{ __lh_user_lists | user_hardening_findings(
+           too_open_homes=__lh_user_open_homes,
+           inactive=__lh_user_inactive,
+           inactive_days=linux_hardening_user_inactive_days,
+           nologin_shell=linux_hardening_user_nologin_shell,
+           lock_empty_passwords=linux_hardening_user_lock_empty_passwords | bool,
+           fix_system_shells=linux_hardening_user_fix_system_shells | bool,
+           fix_home_permissions=linux_hardening_user_fix_home_permissions | bool) }}
 
-- name: Record findings
-  ansible.builtin.set_fact:
-    linux_hardening_user_findings: "{{ __lh_user_findings | from_json }}"
-
-- name: Report user_hardening result
+- name: audit | Report user_hardening result
   ansible.builtin.debug:
     msg: "{{ 'COMPLIANT' if linux_hardening_user_findings | length == 0 else linux_hardening_user_findings }}"
 
 # After remediation only fixable findings fail the run; the others need a human.
-- name: Fail on findings
+- name: audit | Fail on findings
   ansible.builtin.fail:
     msg: "user_hardening found {{ __lh_user_blocking | length }} deviation(s)."
   vars:
     __lh_user_blocking: >-
-      {{ linux_hardening_user_findings
-         if (linux_hardening_fail_on_error | bool) and not (__lh_user_audit_fatal | default(false))
-         else linux_hardening_user_findings | selectattr('fixable') | list
-         if (__lh_user_audit_fatal | default(false)) else [] }}
-  when: __lh_user_blocking | length > 0
+      {{ linux_hardening_user_findings | selectattr('fixable') | list
+         if __lh_user_audit_fatal | default(false) else linux_hardening_user_findings }}
+  when:
+    - __lh_user_blocking | length > 0
+    - (__lh_user_audit_fatal | default(false)) or (linux_hardening_fail_on_error | bool)

@@ -18,6 +18,7 @@ quiet:x:402:402::/var/lib/quiet:/usr/sbin/nologin
 alice:x:1500:1500::/home/alice:/bin/bash
 twin:x:1500:1500::/home/twin:/bin/bash
 nobody:x:65534:65534::/nonexistent:/bin/false
+legacy::1600:1600::/home/legacy:/usr/sbin/nologin
 """
 SHADOW = "root:$6$hash:1::::::\nalice::1::::::\nsvc:!:1::::::\ntwin::1::::::\n"
 LOGIN_DEFS = "# defs\nUID_MIN\t\t\t 1000\n"
@@ -31,7 +32,8 @@ def db():
 def test_parse_keeps_no_hash(db):
     assert db["uid_min"] == 1000
     root = db["accounts"][0]
-    assert root == {"name": "root", "uid": 0, "home": "/root", "shell": "/bin/bash", "empty_pw": False}
+    assert root == {"name": "root", "uid": 0, "home": "/root", "shell": "/bin/bash", "empty_pw": False,
+                    "empty_passwd_field": False}
     assert "$6$hash" not in repr(db)
 
 
@@ -61,6 +63,7 @@ def test_offenders(db):
     assert lists["system_shell"] == ["svc"]  # sync runs /bin/sync, quiet has nologin
     assert lists["extra_uid0"] == ["toor"]
     assert lists["duplicate_uid"] == [0, 1500]
+    assert lists["empty_passwd_field"] == ["legacy"]  # no shadow entry, still no password
     assert lists["interactive"] == [{"name": "alice", "home": "/home/alice"}]  # nobody: 65534 and /bin/false
 
 
@@ -70,10 +73,17 @@ def test_findings_respects_switches_and_report_only(db):
     all_on = uh.findings(lists, homes, inactive=-1, inactive_days=30, nologin_shell="/usr/sbin/nologin")
     assert [f["key"] for f in all_on] == [
         "empty password: alice", "system account shell: svc", "home directory: /home/alice",
-        "useradd INACTIVE", "UID 0 account: toor", "duplicate UID: 0", "duplicate UID: 1500"]
+        "useradd INACTIVE", "UID 0 account: toor", "duplicate UID: 0", "duplicate UID: 1500",
+        "empty /etc/passwd password field: legacy"]
     assert all_on[3]["expected"] == "30" and all_on[3]["actual"] == "-1"
-    assert [f["fixable"] for f in all_on] == [True] * 4 + [False] * 3
+    assert [f["fixable"] for f in all_on] == [True] * 4 + [False] * 4
 
     off = uh.findings(lists, homes, inactive="30", inactive_days=None, nologin_shell="/usr/sbin/nologin",
                       lock_empty_passwords=False, fix_system_shells=False, fix_home_permissions=False)
     assert all(not f["fixable"] for f in off)
+
+
+def test_inactive():
+    assert uh.inactive("GROUP=100\nINACTIVE=30\nEXPIRE=\n") == 30
+    assert uh.inactive("INACTIVE=-1\n") == -1
+    assert uh.inactive("GROUP=100\n") == -1  # missing line means disabled

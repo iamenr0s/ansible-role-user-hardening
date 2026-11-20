@@ -4,13 +4,14 @@
 
 - name: configure | Work out what must change
   ansible.builtin.set_fact:
-    __lh_user_todo_pw: >-
-      {{ __lh_user_lists['empty_password'] if linux_hardening_user_lock_empty_passwords | bool else [] }}
-    __lh_user_todo_shell: >-
-      {{ __lh_user_lists['system_shell'] if linux_hardening_user_fix_system_shells | bool else [] }}
-    __lh_user_todo_home: "{{ __lh_user_open_homes if linux_hardening_user_fix_home_permissions | bool else [] }}"
+    __linux_hardening_user_todo_pw: >-
+      {{ __linux_hardening_user_lists['empty_password'] if linux_hardening_user_lock_empty_passwords | bool else [] }}
+    __linux_hardening_user_todo_shell: >-
+      {{ __linux_hardening_user_lists['system_shell'] if linux_hardening_user_fix_system_shells | bool else [] }}
+    __linux_hardening_user_todo_home: >-
+      {{ __linux_hardening_user_open_homes if linux_hardening_user_fix_home_permissions | bool else [] }}
     # One timestamp for both files, and no dependency on gathered facts.
-    __lh_user_backup_stamp: "{{ now(fmt='%Y%m%dT%H%M%S') }}"
+    __linux_hardening_user_backup_stamp: "{{ now(fmt='%Y%m%dT%H%M%S') }}"
 
 - name: configure | Ensure the backup directory exists
   ansible.builtin.file:
@@ -24,7 +25,7 @@
 - name: configure | Back up the account files before changing them
   ansible.builtin.copy:
     src: "/etc/{{ item }}"
-    dest: "{{ linux_hardening_user_backup_dir }}/{{ item }}.{{ __lh_user_backup_stamp }}"
+    dest: "{{ linux_hardening_user_backup_dir }}/{{ item }}.{{ __linux_hardening_user_backup_stamp }}"
     remote_src: true
     owner: root
     group: root
@@ -33,33 +34,38 @@
   when:
     - linux_hardening_backup | bool
     - not ansible_check_mode  # the backup dir may not exist yet; nothing changes in check mode anyway
-    - (__lh_user_todo_pw + __lh_user_todo_shell) | length > 0
+    - (__linux_hardening_user_todo_pw + __linux_hardening_user_todo_shell) | length > 0
 
 - name: configure | Lock accounts with an empty password
   ansible.builtin.user:
     name: "{{ item }}"
     password_lock: true
-  loop: "{{ __lh_user_todo_pw }}"
+  loop: "{{ __linux_hardening_user_todo_pw }}"
 
 - name: configure | Give system accounts a non-login shell
   ansible.builtin.user:
     name: "{{ item }}"
     shell: "{{ linux_hardening_user_nologin_shell }}"
-  loop: "{{ __lh_user_todo_shell }}"
+  loop: "{{ __linux_hardening_user_todo_shell }}"
 
 - name: configure | Restrict home directory permissions
   ansible.builtin.file:
     path: "{{ item['home'] }}"
     state: directory
     mode: "g-w,o-rwx"
-  loop: "{{ __lh_user_todo_home }}"
+  loop: "{{ __linux_hardening_user_todo_home }}"
   loop_control:
     label: "{{ item['home'] }}"
 
-# No module manages the useradd defaults; only runs when the current value differs.
+# The file that useradd -D -f writes; Debian ships the line commented out.
 - name: configure | Set the inactivity lock period for new accounts
-  ansible.builtin.command: useradd -D -f {{ linux_hardening_user_inactive_days | int }}
-  changed_when: true
-  when:
-    - linux_hardening_user_inactive_days is not none
-    - __lh_user_inactive | int != linux_hardening_user_inactive_days | int  # 2.16 may return a string
+  ansible.builtin.lineinfile:
+    path: /etc/default/useradd
+    regexp: '^#?\s*INACTIVE='
+    line: "INACTIVE={{ linux_hardening_user_inactive_days | int }}"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+    backup: "{{ linux_hardening_backup | bool }}"
+  when: linux_hardening_user_inactive_days is not none

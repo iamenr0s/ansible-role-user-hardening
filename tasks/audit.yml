@@ -5,9 +5,9 @@
 - name: audit | Compare with desired state
   ansible.builtin.set_fact:
     linux_hardening_user_findings: >-
-      {{ __lh_user_lists | user_hardening_findings(
-           too_open_homes=__lh_user_open_homes,
-           inactive=__lh_user_inactive,
+      {{ __linux_hardening_user_lists | user_hardening_findings(
+           too_open_homes=__linux_hardening_user_open_homes,
+           inactive=__linux_hardening_user_inactive,
            inactive_days=linux_hardening_user_inactive_days,
            nologin_shell=linux_hardening_user_nologin_shell,
            lock_empty_passwords=linux_hardening_user_lock_empty_passwords | bool,
@@ -18,14 +18,20 @@
   ansible.builtin.debug:
     msg: "{{ 'COMPLIANT' if linux_hardening_user_findings | length == 0 else linux_hardening_user_findings }}"
 
-# After remediation only fixable findings fail the run; the others need a human.
+# Report-only findings (UID 0, duplicate UIDs, ...) need a human, so they never fail a remediation run.
+- name: audit | Fail if remediation left fixable findings
+  ansible.builtin.fail:
+    msg: >-
+      user_hardening could not fix
+      {{ linux_hardening_user_findings | selectattr('fixable') | list | length }} deviation(s).
+  when:
+    - __linux_hardening_user_audit_fatal | default(false)
+    - linux_hardening_user_findings | selectattr('fixable') | list | length > 0
+
 - name: audit | Fail on findings
   ansible.builtin.fail:
-    msg: "user_hardening found {{ __lh_user_blocking | length }} deviation(s)."
-  vars:
-    __lh_user_blocking: >-
-      {{ linux_hardening_user_findings | selectattr('fixable') | list
-         if __lh_user_audit_fatal | default(false) else linux_hardening_user_findings }}
+    msg: "user_hardening found {{ linux_hardening_user_findings | length }} deviation(s)."
   when:
-    - __lh_user_blocking | length > 0
-    - (__lh_user_audit_fatal | default(false)) or (linux_hardening_fail_on_error | bool)
+    - not (__linux_hardening_user_audit_fatal | default(false))
+    - linux_hardening_fail_on_error | bool
+    - linux_hardening_user_findings | length > 0

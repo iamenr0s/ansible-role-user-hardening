@@ -17,6 +17,11 @@
           linux_hardening_user_inactive_days an integer or null (got '{{ linux_hardening_user_inactive_days }}').
         quiet: true
 
+    - name: Note that linux_hardening_profile does not change this role
+      ansible.builtin.debug:
+        msg: "user_hardening applies the same checks for every profile (got '{{ linux_hardening_profile }}')."
+      when: linux_hardening_profile != 'cis_level1'
+
     - name: Audit (read-only)
       ansible.builtin.include_tasks: audit.yml
       when: linux_hardening_mode == 'audit'
@@ -38,7 +43,7 @@
         - name: Verify effective configuration
           ansible.builtin.include_tasks: audit.yml
           vars:
-            __lh_user_audit_fatal: true
+            __linux_hardening_user_audit_fatal: true
           # In check mode nothing was changed, so the re-audit would always fail.
           when:
             - linux_hardening_verify | bool

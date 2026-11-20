@@ -4,18 +4,22 @@ Filters (all pure Python, no host access):
 
 ``user_hardening_parse_accounts(passwd, shadow, login_defs)``
     Input: the text of /etc/passwd, /etc/shadow and /etc/login.defs.
-    Output: ``{'uid_min': int, 'accounts': [{'name', 'uid', 'home', 'shell', 'empty_pw'}]}``.
+    Output: ``{'uid_min': int, 'accounts': [{'name', 'uid', 'home', 'shell', 'empty_pw', 'empty_passwd_field'}]}``.
     Only whether a password field is empty is kept, never the hash.
 
 ``user_hardening_offenders(db, exempt)``
     Input: the parse_accounts result and a list of exempt account names.
     Output: ``{'empty_password': [name], 'system_shell': [name], 'extra_uid0': [name],
-    'duplicate_uid': [uid], 'interactive': [{'name', 'home'}]}``.
+    'duplicate_uid': [uid], 'empty_passwd_field': [name], 'interactive': [{'name', 'home'}]}``.
 
 ``user_hardening_open_homes(stat_results)``
     Input: the ``results`` of an ``ansible.builtin.stat`` loop over ``offenders['interactive']``.
     Output: the loop items (``{'name', 'home'}``) whose home is a directory with group-write or any
     "other" permission.
+
+``user_hardening_inactive(useradd_defaults)``
+    Input: the output of ``useradd -D``.
+    Output: the INACTIVE value as an int, -1 (disabled) when absent.
 
 ``user_hardening_findings(lists, too_open_homes, inactive, inactive_days, nologin_shell, ...)``
     Input: the offenders result plus the observed state and the role switches.
@@ -58,7 +62,7 @@ def parse_accounts(passwd: str, shadow: str, login_defs: str) -> dict[str, Any]:
     :param shadow: contents of /etc/shadow; only whether field 2 is empty is kept
     :param login_defs: contents of /etc/login.defs; UID_MIN defaults to 1000
     :raises ValueError: on a passwd entry with fewer than 6 fields or a non-numeric UID
-    :return: ``{'uid_min': int, 'accounts': [{'name', 'uid', 'home', 'shell', 'empty_pw'}]}``
+    :return: ``{'uid_min': int, 'accounts': [{'name', 'uid', 'home', 'shell', 'empty_pw', 'empty_passwd_field'}]}``
     """
     empty_pw = {}
     for line in _lines(shadow):
@@ -76,6 +80,8 @@ def parse_accounts(passwd: str, shadow: str, login_defs: str) -> dict[str, Any]:
             "home": fields[5],
             "shell": fields[6] if len(fields) > 6 else "",
             "empty_pw": empty_pw.get(fields[0], False),
+            # PAM uses the passwd field itself unless it is "x", so empty here means no password at all.
+            "empty_passwd_field": fields[1] == "",
         })
 
     uid_min = re.search(r"(?m)^UID_MIN\s+(\d+)", login_defs)
@@ -87,9 +93,11 @@ def offenders(db: dict[str, Any], exempt: list[str]) -> dict[str, list]:
 
     :param db: result of :func:`parse_accounts`
     :param exempt: account names skipped by the password, shell and home checks
-    :return: ``{'empty_password', 'system_shell', 'extra_uid0', 'duplicate_uid', 'interactive'}``
+    :return: ``{'empty_password', 'system_shell', 'extra_uid0', 'duplicate_uid', 'empty_passwd_field',
+        'interactive'}``
     """
-    out = {"empty_password": [], "system_shell": [], "extra_uid0": [], "duplicate_uid": [], "interactive": []}
+    out = {"empty_password": [], "system_shell": [], "extra_uid0": [], "duplicate_uid": [],
+           "empty_passwd_field": [], "interactive": []}
     seen = set()
     for acct in db["accounts"]:
         name, uid, home = acct["name"], acct["uid"], acct["home"]
@@ -103,6 +111,8 @@ def offenders(db: dict[str, Any], exempt: list[str]) -> dict[str, list]:
         if uid in seen and uid not in out["duplicate_uid"]:
             out["duplicate_uid"].append(uid)
         seen.add(uid)
+        if acct["empty_passwd_field"]:
+            out["empty_passwd_field"].append(name)
         if db["uid_min"] <= uid < 65534 and login and home.startswith("/") and name not in exempt:
             out["interactive"].append({"name": name, "home": home})
     return out
@@ -118,6 +128,16 @@ def open_homes(stat_results: list[dict[str, Any]]) -> list[dict[str, str]]:
             if r["stat"].get("isdir") and int(r["stat"]["mode"], 8) & 0o027]
 
 
+def inactive(useradd_defaults: str) -> int:
+    """Read the INACTIVE default.
+
+    :param useradd_defaults: output of ``useradd -D``
+    :return: the INACTIVE value, or -1 (disabled) when the line is missing
+    """
+    match = re.search(r"(?m)^INACTIVE=(-?\d+)", useradd_defaults)
+    return int(match.group(1)) if match else -1
+
+
 def findings(lists: dict[str, list], too_open_homes: list[dict[str, str]], inactive: int | str,
              inactive_days: int | str | None, nologin_shell: str, lock_empty_passwords: bool = True,
              fix_system_shells: bool = True, fix_home_permissions: bool = True) -> list[dict[str, Any]]:
@@ -131,7 +151,8 @@ def findings(lists: dict[str, list], too_open_homes: list[dict[str, str]], inact
     :param lock_empty_passwords: report empty passwords
     :param fix_system_shells: report system accounts with a login shell
     :param fix_home_permissions: report open home directories
-    :return: ``[{'key', 'expected', 'actual', 'fixable'}]``; UID 0 and duplicate UIDs are never fixable
+    :return: ``[{'key', 'expected', 'actual', 'fixable'}]``; UID 0, duplicate UIDs and empty
+        /etc/passwd password fields are never fixable
     """
     out = []
 
@@ -153,6 +174,9 @@ def findings(lists: dict[str, list], too_open_homes: list[dict[str, str]], inact
         add("UID 0 account: %s" % name, "only root", "extra UID 0", False)
     for uid in lists["duplicate_uid"]:
         add("duplicate UID: %s" % uid, "unique", "shared", False)
+    # usermod -L only locks /etc/shadow, which PAM ignores here; needs pwconv or a manual fix.
+    for name in lists["empty_passwd_field"]:
+        add("empty /etc/passwd password field: %s" % name, "x (shadowed)", "empty", False)
     return out
 
 
@@ -168,5 +192,6 @@ class FilterModule:
             "user_hardening_parse_accounts": parse_accounts,
             "user_hardening_offenders": offenders,
             "user_hardening_open_homes": open_homes,
+            "user_hardening_inactive": inactive,
             "user_hardening_findings": findings,
         }

@@ -1,49 +1,56 @@
 ---
 # Read-only. Reads the local account files (not LDAP/SSSD) and derives the lists used by audit and configure.
-- name: facts | Read local account files
+- name: facts | Read /etc/passwd
   ansible.builtin.slurp:
-    src: "{{ item }}"
-  loop: [/etc/passwd, /etc/shadow, /etc/login.defs]  # order matters: "Parse accounts" reads results[0..2]
-  register: __lh_user_raw
+    src: /etc/passwd
+  register: __linux_hardening_user_passwd
   check_mode: false
-  no_log: true  # /etc/shadow holds password hashes
+
+- name: facts | Read /etc/login.defs
+  ansible.builtin.slurp:
+    src: /etc/login.defs
+  register: __linux_hardening_user_login_defs
+  check_mode: false
+
+- name: facts | Read /etc/shadow
+  ansible.builtin.slurp:
+    src: /etc/shadow
+  register: __linux_hardening_user_shadow
+  check_mode: false
+  no_log: true  # password hashes
 
 # No module reports the useradd defaults; read-only, so never changed.
 - name: facts | Read the useradd defaults
   ansible.builtin.command: useradd -D
-  register: __lh_user_useradd
+  register: __linux_hardening_user_useradd
   changed_when: false
   check_mode: false
 
 # Only whether a password is empty is kept, never the hash itself (filter_plugins/user_hardening.py).
 - name: facts | Parse accounts
   ansible.builtin.set_fact:
-    __lh_user_raw: null  # drop the /etc/shadow contents from hostvars once parsed
-    __lh_user_db: >-
-      {{ __lh_user_raw['results'][0]['content'] | b64decode
-         | user_hardening_parse_accounts(__lh_user_raw['results'][1]['content'] | b64decode,
-                                         __lh_user_raw['results'][2]['content'] | b64decode) }}
+    __linux_hardening_user_shadow: null  # drop the /etc/shadow contents from hostvars once parsed
+    __linux_hardening_user_db: >-
+      {{ __linux_hardening_user_passwd['content'] | b64decode
+         | user_hardening_parse_accounts(__linux_hardening_user_shadow['content'] | b64decode,
+                                         __linux_hardening_user_login_defs['content'] | b64decode) }}
+    __linux_hardening_user_inactive: "{{ __linux_hardening_user_useradd['stdout'] | user_hardening_inactive }}"
 
 - name: facts | Derive offender lists
   ansible.builtin.set_fact:
-    __lh_user_lists: >-
-      {{ __lh_user_db | user_hardening_offenders(linux_hardening_user_exempt
-                                                 + ([ansible_user] if ansible_user is defined else [])) }}
+    __linux_hardening_user_lists: >-
+      {{ __linux_hardening_user_db | user_hardening_offenders(linux_hardening_user_exempt
+                                                              + ([ansible_user] if ansible_user is defined else [])) }}
 
 - name: facts | Stat interactive users' home directories
   ansible.builtin.stat:
     path: "{{ item['home'] }}"
-  loop: "{{ __lh_user_lists['interactive'] }}"
+  loop: "{{ __linux_hardening_user_lists['interactive'] }}"
   loop_control:
     label: "{{ item['name'] }}"
-  register: __lh_user_homes
+  register: __linux_hardening_user_homes
   check_mode: false
 
 - name: facts | Find home directories that are too open
   ansible.builtin.set_fact:
-    __lh_user_open_homes: "{{ __lh_user_homes['results'] | user_hardening_open_homes }}"
-
-- name: facts | Read the current inactivity setting
-  ansible.builtin.set_fact:
-    __lh_user_inactive: >-
-      {{ (__lh_user_useradd['stdout'] | regex_findall('(?m)^INACTIVE=(-?\d+)') + ['-1']) | first | int }}
+    __linux_hardening_user_open_homes: "{{ __linux_hardening_user_homes['results'] | user_hardening_open_homes }}"

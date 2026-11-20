@@ -4,5 +4,5 @@ exclude_paths:
   - .github/
   - .ansible/
 skip_list:
-  # Collection convention is linux_hardening_<domain>_*, not <role_name>_* (docs/architecture.md).
+  # Collection convention is linux_hardening_<domain>_*, not <role_name>_* (README.md, "Variable names").
   - var-naming[no-role-prefix]

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+- Docs: README adds a Role Variables table.
+- Test: the default Molecule scenario runs a `check` (dry-run remediate) step first.
+- CI: actions are pinned by commit SHA.
+
 ## 1.0.0
 - Split out of the iamenr0s.linux_hardening collection.
 - Password hashes are no longer kept in host facts: `/etc/shadow` is read with `no_log` and dropped once parsed.

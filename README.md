@@ -41,6 +41,25 @@ Variables use the collection-wide `linux_hardening_*` prefix (shared with siblin
 - Tightened home directories can break shared-home setups.
 - Only `ansible_user` is auto-exempted. If you connect via `remote_user`/`ansible.cfg` or a local connection, add that account to `linux_hardening_user_exempt`.
 
+## Role Variables
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `linux_hardening_mode` | str | `audit` | audit is read-only. Choices: `audit`, `remediate`. |
+| `linux_hardening_confirm_remediation` | bool | `false` | Must be true before remediate changes anything. |
+| `linux_hardening_profile` | str | `cis_level1` | Security profile. Choices: `baseline`, `cis_level1`, `cis_level2`. |
+| `linux_hardening_backup` | bool | `true` | Copy /etc/passwd and /etc/shadow before changing accounts. |
+| `linux_hardening_verify` | bool | `true` | Re-audit after remediation. |
+| `linux_hardening_fail_on_error` | bool | `true` | Fail the play when audit finds deviations. |
+| `linux_hardening_user_enabled` | bool | `true` | Run the role. |
+| `linux_hardening_user_exempt` | list of str | `["root"]` | Accounts remediation never changes; the Ansible user is always added. |
+| `linux_hardening_user_lock_empty_passwords` | bool | `true` | Lock accounts with an empty password. |
+| `linux_hardening_user_fix_system_shells` | bool | `true` | Give system accounts a non-login shell. |
+| `linux_hardening_user_nologin_shell` | path | `/usr/sbin/nologin` | Shell assigned to system accounts. |
+| `linux_hardening_user_fix_home_permissions` | bool | `true` | Remove group-write and other access from interactive users' homes. |
+| `linux_hardening_user_inactive_days` | raw | `30` | Default inactivity lock period (useradd -D -f), int; null to leave unmanaged. |
+| `linux_hardening_user_backup_dir` | path | `/var/backups/linux-hardening` | Where account file backups go. |
+
 ## Example
 ```yaml
 - hosts: all
